@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Speed Tracker</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin: 0;
+            padding: 0;
+        }
+        .card {
+            margin: 50px auto;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 10px;
+            width: 90%;
+            max-width: 300px;
+            background-color: #f9f9f9;
+            box-shadow: 0px 0px 10px 0px rgba(0,0,0,0.1);
+    text-align: center; /* Center the content horizontally */
+
+        }
+        
+        .input-group {
+            margin-bottom: 10px;
+            text-align: left;
+        }
+        .input-group label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        .input-group input,
+        .input-group select {
+            width: 100%;
+            padding: 5px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+        }
+        .vehicle-details {
+            font-size: 14px;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+        .speed {
+            font-size: 24px;
+            color: #333;
+        }
+        .delete-btn {
+            margin-top: 10px;
+            background-color: #ff0000;
+            color: #fff;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-left: auto;
+            margin-right: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="card" id="vehicleForm">
+        <form id="vehicleDetailsForm">
+            <div class="input-group">
+                <label for="name">Name:</label>
+                <input type="text" id="name" name="name" required>
+            </div>
+            <div class="input-group">
+                <label for="phone">Phone No:</label>
+                <input type="tel" id="phone" name="phone" pattern="[0-9]{10}" title="Please enter a 10-digit phone number" required>
+            </div>
+            <div class="input-group">
+                <label for="vehicleType">Vehicle Type:</label>
+                <select id="vehicleType" name="vehicleType" required>
+                    <option value="">Select Vehicle Type</option>
+                    <option value="heavy">Heavy</option>
+                    <option value="light">Light</option>
+                </select>
+            </div>
+            <div class="input-group">
+                <label for="vehicleNumber">Vehicle Number:</label>
+                <input type="text" id="vehicleNumber" name="vehicleNumber" required>
+            </div>
+            <button type="submit">Submit</button>
+        </form>
+    </div>
+
+    <div class="card" id="locationInfo" style="display: none;">
+        <div class="vehicle-details" id="vehicleDetails"></div>
+        <div class="speed" id="speed"></div>
+        <button class="delete-btn" id="deleteBtn" style="display: none;">Delete Vehicle Details</button>
+    </div>
+
+    <script>
+        let speedExceededTimeout = null;
+        let speedLimit = 50; // Default speed limit
+
+        function updateLocation(pos) {
+            const { speed } = pos.coords;
+            // Convert speed from m/s to km/hr
+            let speedKmHr = (speed * 3.6).toFixed(2); // 1 m/s = 3.6 km/hr
+            // speedKmHr=70;
+            document.getElementById('speed').innerHTML = `${speedKmHr} km/hr`;
+            
+
+            if (parseFloat(speedKmHr) > speedLimit) {
+                if (!speedExceededTimeout) {
+                    // Start timeout if not already started
+                    speedExceededTimeout = setTimeout(() => {
+                        // Trigger API call when speed exceeds the limit continuously for 30 seconds
+                        fetch('https://speedtr.online/api/speedexceedlimit', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                name: localStorage.getItem('name'),
+                                phone: localStorage.getItem('phone'),
+                                vehicleType: localStorage.getItem('vehicleType'),
+                                vehicleNo: localStorage.getItem('vehicleNumber'),
+                                speed: speedKmHr
+                            })
+                        })
+                        .then(response => {
+                            if (response.ok) {
+                                console.log("API call successful");
+                            } else {
+                                console.error("API call failed");
+                            }
+                        })
+                        .catch(error => {
+                            console.error("API call failed:", error);
+                        });
+
+                        // alert(`Speed has exceeded ${speedLimit} km/hr continuously for 30 seconds!`);
+                        // Reset timeout after displaying the alert
+                        speedExceededTimeout = null;
+                    }, 30000); // 30 seconds
+                }
+            } else {
+                // Reset timeout if speed is below the limit
+                clearTimeout(speedExceededTimeout);
+                speedExceededTimeout = null;
+            }
+        }
+
+        function error(err) {
+            console.warn(`ERROR(${err.code}): ${err.message}`);
+        }
+
+        const vehicleDetailsForm = document.getElementById('vehicleDetailsForm');
+        const locationInfo = document.getElementById('locationInfo');
+        const vehicleDetails = document.getElementById('vehicleDetails');
+        const deleteBtn = document.getElementById('deleteBtn');
+        const vehicleForm = document.getElementById('vehicleForm');
+
+        const storedName = localStorage.getItem('name');
+        const storedPhone = localStorage.getItem('phone');
+        const storedVehicleType = localStorage.getItem('vehicleType');
+        const storedVehicleNo = localStorage.getItem('vehicleNumber');
+
+        if (storedName && storedPhone && storedVehicleType && storedVehicleNo) {
+            vehicleDetails.innerHTML = `Name: ${storedName}<br>Phone: ${storedPhone}<br>Vehicle Type: ${storedVehicleType}<br>Vehicle No: ${storedVehicleNo}`;
+            vehicleDetailsForm.style.display = 'none';
+            vehicleForm.style.display = 'none';
+            locationInfo.style.display = 'block';
+            deleteBtn.style.display = 'block';
+            // Set speed limit based on vehicle type
+            speedLimit = storedVehicleType === 'heavy' ? 40 : 50;
+            // Start geolocation tracking after storing the details
+            navigator.geolocation.watchPosition(updateLocation, error, { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 });
+        }
+
+        vehicleDetailsForm.addEventListener('submit', function(event) {
+            event.preventDefault();
+            const name = document.getElementById('name').value;
+            const phone = document.getElementById('phone').value;
+            const vehicleType = document.getElementById('vehicleType').value;
+            const vehicleNumber = document.getElementById('vehicleNumber').value;
+
+            if (name.trim() !== '' && /^\d{10}$/.test(phone) && vehicleType.trim() !== '' && vehicleNumber.trim() !== '') {
+                localStorage.setItem('name', name);
+                localStorage.setItem('phone', phone);
+                localStorage.setItem('vehicleType', vehicleType);
+                localStorage.setItem('vehicleNumber', vehicleNumber);
+                vehicleDetails.innerHTML = `Name: ${name}<br>Phone: ${phone}<br>Vehicle Type: ${vehicleType}<br>Vehicle No: ${vehicleNumber}`;
+                vehicleDetailsForm.style.display = 'none';
+                vehicleForm.style.display = 'none';
+                locationInfo.style.display = 'block';
+                deleteBtn.style.display = 'block';
+                // Set speed limit based on vehicle type
+                speedLimit = vehicleType === 'heavy' ? 40 : 50;
+                // Start geolocation tracking after storing the details
+                navigator.geolocation.watchPosition(updateLocation, error, { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 });
+            } else {
+                alert('Please fill in all fields correctly.');
+            }
+        });
+
+        deleteBtn.addEventListener('click', function() {
+            const confirmDelete = confirm('Are you sure you want to delete these vehicle details?');
+            if (confirmDelete) {
+                localStorage.removeItem('name');
+                localStorage.removeItem('phone');
+                localStorage.removeItem('vehicleType');
+                localStorage.removeItem('vehicleNumber');
+                location.reload();
+            }
+        });
+    </script>
+</body>
+</html>
